@@ -181,7 +181,7 @@ URL: {url}
                 "model_used": self._effective_model(),
                 "tokens_consumed": total_tokens,
                 "success": False,
-                "error": "All transcript chunks failed to summarize.",
+                "error": "All content chunks failed to summarize.",
             }
 
         merged_content = "\n\n".join(chunk_summaries)

@@ -32,9 +32,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "max_tokens": 2000,
     "timeout": 60,
     "max_retries": 3,
-    "youtube_transcript_langs": ["zh-Hans", "zh", "en"],
-    "youtube_max_input_chars": 20000,
-    "youtube_chunk_size": 4000,
     "prompt_template": DEFAULT_PROMPT_TEMPLATE,
 }
 
@@ -113,14 +110,6 @@ def _to_int(value: Any, default: int, field_name: str) -> int:
         ) from exc
 
 
-def _to_list(value: Any, default: list[str]) -> list[str]:
-    if value is None or value == "":
-        return list(default)
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    return [item.strip() for item in str(value).split(",") if item.strip()]
-
-
 def load_config(
     config: Optional[Dict[str, Any]] = None,
     env_path: Optional[str | Path] = None,
@@ -197,36 +186,6 @@ def load_config(
     if max_retries <= 0:
         raise ConfigurationError("`max_retries` must be greater than 0.")
 
-    youtube_langs = _to_list(
-        overrides.get("youtube_transcript_langs")
-        or _pick_value(env_values, "YOUTUBE_TRANSCRIPT_LANGS"),
-        list(DEFAULT_CONFIG["youtube_transcript_langs"]),
-    )
-    if not youtube_langs:
-        raise ConfigurationError("`youtube_transcript_langs` must contain at least 1 language.")
-
-    youtube_max_input_chars_raw = overrides.get("youtube_max_input_chars")
-    if youtube_max_input_chars_raw is None:
-        youtube_max_input_chars_raw = _pick_value(env_values, "YOUTUBE_MAX_INPUT_CHARS")
-    youtube_max_input_chars = _to_int(
-        youtube_max_input_chars_raw,
-        int(DEFAULT_CONFIG["youtube_max_input_chars"]),
-        "youtube_max_input_chars",
-    )
-    if youtube_max_input_chars <= 0:
-        raise ConfigurationError("`youtube_max_input_chars` must be greater than 0.")
-
-    youtube_chunk_size_raw = overrides.get("youtube_chunk_size")
-    if youtube_chunk_size_raw is None:
-        youtube_chunk_size_raw = _pick_value(env_values, "YOUTUBE_CHUNK_SIZE")
-    youtube_chunk_size = _to_int(
-        youtube_chunk_size_raw,
-        int(DEFAULT_CONFIG["youtube_chunk_size"]),
-        "youtube_chunk_size",
-    )
-    if youtube_chunk_size <= 0:
-        raise ConfigurationError("`youtube_chunk_size` must be greater than 0.")
-
     prompt_template = str(
         overrides.get("prompt_template")
         or _pick_value(env_values, "LLM_PROMPT_TEMPLATE")
@@ -244,8 +203,5 @@ def load_config(
         "max_tokens": max_tokens,
         "timeout": timeout,
         "max_retries": max_retries,
-        "youtube_transcript_langs": youtube_langs,
-        "youtube_max_input_chars": youtube_max_input_chars,
-        "youtube_chunk_size": youtube_chunk_size,
         "prompt_template": prompt_template,
     }

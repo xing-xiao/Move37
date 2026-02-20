@@ -2,11 +2,10 @@
 
 `move37.summarize` 用于对 `collect_all()` 采集出的 URL 列表做批量摘要，输出中文 `brief`（<=100字）和 `summary`（<=1000字），并补充处理元数据。
 
-YouTube 链接会先抓取内容再总结：
+路由规则：
 
-- 优先抓取字幕（transcript）
-- 字幕不可用时回退到 Gemini（默认 prompt + URL）
-- 超长字幕会先分块摘要，再汇总为最终摘要
+- YouTube 链接固定走 Gemini（URL + prompt 模板）
+- 非 YouTube 链接走当前配置的 `LLM_PROVIDER`
 - Gemini 模型不可用时会自动尝试可用的 fallback 模型
 
 ## 1. 模块结构
@@ -68,7 +67,7 @@ LLM_GEMINI_MODEL=gemini-2.5-flash
 LLM_GEMINI_BASE_URL=
 ```
 
-说明：即使主 `LLM_PROVIDER` 不是 Gemini，YouTube 字幕抓取失败时也会用 Gemini 做 URL 回退摘要，因此仍建议配置这组 Gemini 参数。
+说明：即使主 `LLM_PROVIDER` 不是 Gemini，YouTube 链接也固定由 Gemini 处理，因此必须配置这组 Gemini 参数。
 
 ### 3.4 配置示例（GLM）
 
@@ -86,18 +85,7 @@ LLM_PROMPT_TEMPLATE=...{url}...
 ```
 
 注意：`LLM_PROMPT_TEMPLATE` 必须包含 `{url}` 占位符。  
-如需让模型直接基于预抓取内容总结，可在模板中加入 `{content}` 占位符。
-
-### 3.6 YouTube 预处理配置
-
-```bash
-# 字幕语言优先级（逗号分隔）
-YOUTUBE_TRANSCRIPT_LANGS=zh-Hans,zh,en
-# 传给摘要模型的最大字符数
-YOUTUBE_MAX_INPUT_CHARS=20000
-# 超过该值启用分块摘要
-YOUTUBE_CHUNK_SIZE=4000
-```
+YouTube 也是将 URL 与这个模板组合后交给 Gemini，不做字幕预处理。
 
 ## 4. 配置加载规则
 
@@ -119,11 +107,6 @@ Provider 选择与读取规则：
    - `LLM_MAX_TOKENS`
    - `LLM_TIMEOUT`
    - `LLM_MAX_RETRIES`
-4. YouTube 预处理参数：
-   - `YOUTUBE_TRANSCRIPT_LANGS`
-   - `YOUTUBE_MAX_INPUT_CHARS`
-   - `YOUTUBE_CHUNK_SIZE`
-
 ## 5. 运行方式
 
 ### 5.1 运行示例 CLI
@@ -189,9 +172,8 @@ summary_result = summarize_all(
 
 YouTube 项额外可能包含：
 
-- `summary_basis`: `transcript` 或 `gemini_url_fallback`
+- `summary_basis`: `gemini_url`
 - `youtube_video_id`
-- `warning`（例如字幕不可用，已降级到 Gemini URL 摘要）
 
 ## 7. 日志与重试
 

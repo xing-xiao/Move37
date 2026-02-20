@@ -7,12 +7,8 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-from .config import DEFAULT_CONFIG, ConfigurationError, load_config
-from .content_fetcher import (
-    extract_youtube_video_id,
-    fetch_youtube_transcript_summary_input,
-    is_youtube_url,
-)
+from .config import ConfigurationError, load_config
+from .content_fetcher import extract_youtube_video_id, is_youtube_url
 from .llm_client import LLMClient
 
 LOGGER = logging.getLogger(__name__)
@@ -31,7 +27,7 @@ def _create_llm_client(loaded_config: Dict[str, Any]) -> LLMClient:
     )
 
 
-def _create_gemini_fallback_client(base_config: Dict[str, Any]) -> LLMClient:
+def _create_gemini_youtube_client(base_config: Dict[str, Any]) -> LLMClient:
     gemini_config = load_config(
         {
             "provider": "gemini",
@@ -119,7 +115,7 @@ def summarize_all(
 
     loaded_config = load_config(config)
     llm_client = _create_llm_client(loaded_config)
-    gemini_fallback_client: LLMClient | None = None
+    gemini_client: LLMClient | None = None
     prompt_template = loaded_config["prompt_template"]
 
     output = copy.deepcopy(collection_result)
@@ -181,75 +177,41 @@ def summarize_all(
                 continue
 
             extra_summary_fields: Dict[str, Any] = {}
-            prepared_content: str | None = None
-            chunk_size: int | None = None
             active_client = llm_client
             active_prompt_template = prompt_template
             if is_youtube_url(url):
-                try:
-                    youtube_input = fetch_youtube_transcript_summary_input(
-                        url=url,
-                        title=title,
-                        published=str(item.get("published") or ""),
-                        preferred_languages=loaded_config["youtube_transcript_langs"],
-                        max_input_chars=loaded_config["youtube_max_input_chars"],
-                    )
-                    prepared_content = str(youtube_input.get("content") or "")
-                    chunk_size = int(loaded_config["youtube_chunk_size"])
-                    extra_summary_fields = {
-                        "summary_basis": youtube_input.get("basis"),
-                        "youtube_video_id": youtube_input.get("video_id"),
-                    }
-                except Exception as exc:  # noqa: BLE001
-                    transcript_error = f"{type(exc).__name__}: {exc}"
-                    LOGGER.warning(
-                        "YouTube transcript unavailable for %s, fallback to Gemini URL summary. error=%s",
-                        url,
-                        transcript_error,
-                    )
-                    if gemini_fallback_client is None:
-                        try:
-                            gemini_fallback_client = _create_gemini_fallback_client(loaded_config)
-                        except ConfigurationError as gemini_cfg_error:
-                            item.update(
-                                {
-                                    "processing_time": "0.0s",
-                                    "model_used": loaded_config["model"],
-                                    "tokens_consumed": 0,
-                                    "brief": "",
-                                    "summary": "",
-                                    "success": False,
-                                    "error": (
-                                        "YouTube transcript unavailable and Gemini fallback is not configured: "
-                                        f"{gemini_cfg_error}"
-                                    ),
-                                    "summary_basis": "none",
-                                }
-                            )
-                            continue
+                if gemini_client is None:
+                    try:
+                        gemini_client = _create_gemini_youtube_client(loaded_config)
+                    except ConfigurationError as gemini_cfg_error:
+                        item.update(
+                            {
+                                "processing_time": "0.0s",
+                                "model_used": loaded_config["model"],
+                                "tokens_consumed": 0,
+                                "brief": "",
+                                "summary": "",
+                                "success": False,
+                                "error": (
+                                    "YouTube summary requires Gemini configuration: "
+                                    f"{gemini_cfg_error}"
+                                ),
+                                "summary_basis": "none",
+                            }
+                        )
+                        continue
 
-                    active_client = gemini_fallback_client
-                    active_prompt_template = DEFAULT_CONFIG["prompt_template"]
-                    prepared_content = None
-                    chunk_size = None
-                    video_id = str(extract_youtube_video_id(url) or "")
-
-                    extra_summary_fields = {
-                        "summary_basis": "gemini_url_fallback",
-                        "youtube_video_id": video_id,
-                        "warning": (
-                            "Transcript unavailable; summary generated by Gemini with URL only. "
-                            f"transcript_error={transcript_error}"
-                        ),
-                    }
+                active_client = gemini_client
+                extra_summary_fields = {
+                    "summary_basis": "gemini_url",
+                    "youtube_video_id": str(extract_youtube_video_id(url) or ""),
+                }
 
             summary = summarize_single_url(
                 url=url,
                 title=title,
                 llm_client=active_client,
                 prompt_template=active_prompt_template,
-                content=prepared_content,
-                chunk_size=chunk_size,
             )
             if extra_summary_fields:
                 summary.update(extra_summary_fields)
