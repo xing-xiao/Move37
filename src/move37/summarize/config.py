@@ -51,7 +51,7 @@ PROVIDER_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
     "gemini": {
         "base_url": None,
-        "model": "gemini-1.5-pro",
+        "model": "gemini-2.5-flash",
     },
     "glm": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4/",

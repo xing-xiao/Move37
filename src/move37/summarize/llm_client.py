@@ -44,6 +44,7 @@ class LLMClient:
         self.max_tokens = int(max_tokens)
         self.timeout = int(timeout)
         self.max_retries = max(1, int(max_retries))
+        self._runtime_model: str | None = None
 
     def generate_summary(
         self,
@@ -76,7 +77,7 @@ class LLMClient:
                 LOGGER.info(
                     "Calling provider=%s model=%s for URL=%s (attempt %s/%s)",
                     self.provider,
-                    self.model,
+                    self._effective_model(),
                     url,
                     attempt + 1,
                     self.max_retries,
@@ -88,7 +89,7 @@ class LLMClient:
                 return {
                     "brief": brief,
                     "summary": summary,
-                    "model_used": self.model,
+                    "model_used": self._effective_model(),
                     "tokens_consumed": int(token_count),
                     "success": True,
                     "error": None,
@@ -119,11 +120,11 @@ class LLMClient:
         return {
             "brief": "",
             "summary": "",
-            "model_used": self.model,
+            "model_used": self._effective_model(),
             "tokens_consumed": 0,
-                    "success": False,
-                    "error": last_error,
-                }
+            "success": False,
+            "error": last_error,
+        }
 
     def _generate_summary_with_chunking(
         self,
@@ -177,7 +178,7 @@ URL: {url}
             return {
                 "brief": "",
                 "summary": "",
-                "model_used": self.model,
+                "model_used": self._effective_model(),
                 "tokens_consumed": total_tokens,
                 "success": False,
                 "error": "All transcript chunks failed to summarize.",
@@ -281,15 +282,44 @@ URL: {url}
             ) from exc
 
         genai.configure(api_key=self.api_key)
-        model = genai.GenerativeModel(self.model)
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": self.temperature,
-                "max_output_tokens": self.max_tokens,
-            },
-            request_options={"timeout": self.timeout},
-        )
+        current_model = self._effective_model()
+        try:
+            response = self._gemini_generate(genai, current_model, prompt)
+        except Exception as exc:  # noqa: BLE001
+            if not self._is_gemini_model_not_found(exc):
+                raise
+
+            LOGGER.warning(
+                "Configured Gemini model unavailable: %s. Trying fallback models. error=%s",
+                current_model,
+                exc,
+            )
+            fallback_models = self._gemini_fallback_candidates(genai, exclude=current_model)
+
+            last_fallback_error = f"{type(exc).__name__}: {exc}"
+            for fallback_model in fallback_models:
+                try:
+                    response = self._gemini_generate(genai, fallback_model, prompt)
+                    self._runtime_model = fallback_model
+                    LOGGER.warning(
+                        "Switched Gemini model from %s to %s",
+                        current_model,
+                        fallback_model,
+                    )
+                    break
+                except Exception as fallback_exc:  # noqa: BLE001
+                    last_fallback_error = f"{type(fallback_exc).__name__}: {fallback_exc}"
+                    if self._is_gemini_model_not_found(fallback_exc):
+                        continue
+                    raise
+            else:
+                available_models = self._list_gemini_generate_models(genai)
+                model_hint = ", ".join(available_models[:8]) if available_models else "unknown"
+                raise RuntimeError(
+                    "Gemini model is unavailable and fallback failed. "
+                    f"configured={current_model}, available_sample=[{model_hint}], "
+                    f"last_error={last_fallback_error}"
+                ) from exc
 
         text = getattr(response, "text", None)
         if not text:
@@ -313,6 +343,96 @@ URL: {url}
             token_count = int(prompt_tokens) + int(candidates_tokens)
 
         return str(text).strip(), int(token_count or 0)
+
+    def _effective_model(self) -> str:
+        return self._runtime_model or self.model
+
+    def _gemini_generate(self, genai: Any, model_name: str, prompt: str) -> Any:
+        model = genai.GenerativeModel(model_name)
+        return model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": self.temperature,
+                "max_output_tokens": self.max_tokens,
+            },
+            request_options={"timeout": self.timeout},
+        )
+
+    @staticmethod
+    def _normalize_gemini_model_name(model_name: str) -> str:
+        model_name = str(model_name).strip()
+        if model_name.startswith("models/"):
+            return model_name.split("/", 1)[1]
+        return model_name
+
+    @staticmethod
+    def _is_gemini_model_not_found(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return (
+            "not found" in message
+            or "not supported for generatecontent" in message
+            or ("404" in message and "model" in message)
+        )
+
+    def _list_gemini_generate_models(self, genai: Any) -> list[str]:
+        try:
+            models = []
+            for item in genai.list_models():
+                methods = [str(m).lower() for m in getattr(item, "supported_generation_methods", [])]
+                if "generatecontent" not in methods:
+                    continue
+                name = self._normalize_gemini_model_name(getattr(item, "name", ""))
+                if name:
+                    models.append(name)
+
+            deduped: list[str] = []
+            seen = set()
+            for model in models:
+                if model in seen:
+                    continue
+                seen.add(model)
+                deduped.append(model)
+            return deduped
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Failed to list Gemini models: %s", exc)
+            return []
+
+    def _gemini_fallback_candidates(self, genai: Any, exclude: str) -> list[str]:
+        preferred = [
+            "gemini-2.5-flash",
+            "gemini-flash-latest",
+            "gemini-2.5-pro",
+            "gemini-2.0-flash",
+        ]
+        exclude_norm = self._normalize_gemini_model_name(exclude)
+
+        available = self._list_gemini_generate_models(genai)
+        available_set = set(available)
+        candidates: list[str] = []
+
+        for model in preferred:
+            if model == exclude_norm:
+                continue
+            if model in available_set:
+                candidates.append(model)
+
+        if not candidates:
+            for model in available:
+                if model == exclude_norm:
+                    continue
+                if model.startswith("gemini-2.5-flash") or model.startswith("gemini-flash"):
+                    candidates.append(model)
+            for model in available:
+                if model == exclude_norm or model in candidates:
+                    continue
+                candidates.append(model)
+
+        if not candidates:
+            for model in preferred:
+                if model != exclude_norm:
+                    candidates.append(model)
+
+        return candidates
 
     def _parse_summary_payload(self, response_text: str) -> Dict[str, str]:
         payload = self._extract_json_object(response_text)

@@ -7,6 +7,7 @@ YouTube 链接会先抓取内容再总结：
 - 优先抓取字幕（transcript）
 - 字幕不可用时回退到元数据（metadata-only）
 - 超长字幕会先分块摘要，再汇总为最终摘要
+- Gemini 模型不可用时会自动尝试可用的 fallback 模型
 
 ## 1. 模块结构
 
@@ -62,7 +63,7 @@ LLM_DEEPSEEK_BASE_URL=https://api.deepseek.com
 ```bash
 LLM_PROVIDER=gemini
 LLM_GEMINI_API_KEY=AIza...
-LLM_GEMINI_MODEL=gemini-1.5-pro
+LLM_GEMINI_MODEL=gemini-2.5-flash
 # Gemini 通常不需要 BASE_URL
 LLM_GEMINI_BASE_URL=
 ```
