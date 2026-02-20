@@ -62,3 +62,14 @@ LLM为这篇内容生成的公众号文章，作为本文档的子文档，此�
 - `FEISHU_WIKI_PARENT_NODE_TOKEN`：写入文档的父节点 token
 
 系统应在 `FEISHU_WIKI_SPACE_ID` 指定的知识库中，以 `FEISHU_WIKI_PARENT_NODE_TOKEN` 作为父节点创建主文档和后续子文档。
+
+## 3. 测试样例文件
+
+- 示例脚本：`src/examples/write-feishu-docx/write-feishu-docx.py`
+- 测试文件：`src/examples/write-feishu-docx/test_write_feishu_docx.py`
+
+测试重点：
+
+1. 固定接口地址是否与本 spec 一致
+2. `FEISHU_WIKI_SPACE_ID` 和 `FEISHU_WIKI_PARENT_NODE_TOKEN` 的必填校验
+3. Blogs 与 YouTube 在文档结构上的分支差异（YouTube 不包含第 3/4 节）
