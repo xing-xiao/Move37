@@ -43,3 +43,22 @@ LLM为这篇内容生成的公众号文章，作为本文档的子文档，此�
 
 * 注意，Youtube视频不进行这类操作
 
+## 2. 接口与配置约束
+
+### 2.1 飞书接口约束
+
+`write-feishu-docx` 仅使用以下接口：
+
+1. 创建 wiki 节点（文档）  
+   `https://open.feishu.cn/document/server-docs/docs/wiki-v2/space-node/create`
+2. 写入文档内容块  
+   `https://open.feishu.cn/document/docs/docs/document-block/create-2`
+
+### 2.2 环境变量约束
+
+`write-feishu-docx` 除复用飞书应用鉴权配置（`FEISHU_APP_ID`、`FEISHU_APP_SECRET`）外，仅新增以下两个配置：
+
+- `FEISHU_WIKI_SPACE_ID`：目标知识库 space id
+- `FEISHU_WIKI_PARENT_NODE_TOKEN`：写入文档的父节点 token
+
+系统应在 `FEISHU_WIKI_SPACE_ID` 指定的知识库中，以 `FEISHU_WIKI_PARENT_NODE_TOKEN` 作为父节点创建主文档和后续子文档。

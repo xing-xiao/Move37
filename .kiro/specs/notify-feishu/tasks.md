@@ -97,31 +97,32 @@
 
 - [ ] 5. 实现配置管理模块
   - [ ] 5.1 实现 `load_feishu_config` 函数
-    - 从环境变量读取配置（FEISHU_WEBHOOK_URL, FEISHU_BOT_TOKEN, FEISHU_TIMEOUT, FEISHU_ENABLED）
+    - 从环境变量读取配置（FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_RECEIVE_ID, FEISHU_CHAT_RECEIVE_ID_TYPE）
     - 支持通过配置字典覆盖环境变量
-    - 验证必需配置项（FEISHU_WEBHOOK_URL）
-    - 设置默认值（timeout=30.0, enabled=true）
+    - 验证必需配置项（FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_RECEIVE_ID）
+    - 设置默认值（receive_id_type=chat_id）
     - 缺少必需配置时抛出 ConfigurationError
-    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
   - [ ]* 5.2 编写配置管理的单元测试
     - 测试从环境变量加载
     - 测试配置字典覆盖
     - 测试缺失必需配置时抛出异常
     - 测试默认值
-    - 测试 FEISHU_ENABLED=false 的情况
-    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+    - 测试 FEISHU_CHAT_RECEIVE_ID_TYPE 默认值为 chat_id
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
 - [ ] 6. 实现飞书客户端模块
   - [ ] 6.1 实现 `FeishuClient` 类
-    - 实现 `__init__` 方法，接收 webhook_url、bot_token、timeout 参数
+    - 实现 `__init__` 方法，接收 app_id、app_secret、chat_receive_id、chat_receive_id_type 参数
     - 实现 `send_message` 方法
-    - 构建飞书 API 请求（使用 text 或 post 消息类型）
+    - 调用飞书鉴权接口获取 tenant_access_token
+    - 构建飞书消息发送请求（`/im/v1/messages?receive_id_type=...`，使用 text 或 post 消息类型）
     - 使用 requests 库发送 HTTP POST 请求
     - 解析 API 响应，检查错误码
     - 处理网络异常（超时、连接错误）
     - 返回包含 success、message、response 的字典
-    - _Requirements: 3.1, 3.2, 3.3, 3.4, 5.2, 5.3_
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 5.2, 5.3_
 
   - [ ]* 6.2 编写飞书客户端的单元测试（使用 mock）
     - 使用 unittest.mock 或 responses 库 mock HTTP 请求
@@ -130,12 +131,11 @@
     - 测试网络超时
     - 测试连接错误
     - 验证请求格式正确
-    - _Requirements: 3.1, 3.2, 3.3, 3.4, 5.2, 5.3_
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 5.2, 5.3_
 
 - [ ] 7. 实现主通知函数
   - [ ] 7.1 实现 `notify_feishu` 函数
     - 加载配置（调用 load_feishu_config）
-    - 检查 FEISHU_ENABLED 配置
     - 调用 calculate_statistics 计算统计信息
     - 调用 build_message 构建消息
     - 创建 FeishuClient 实例
@@ -143,7 +143,7 @@
     - 处理所有异常，确保不中断主流程
     - 记录详细日志（INFO、ERROR）
     - 返回包含 success、message、statistics 的字典
-    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 3.1, 3.2, 3.3, 4.1, 5.1, 5.4_
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 3.1, 3.2, 3.3, 4.1, 4.5, 5.1, 5.4_
 
   - [ ]* 7.2 编写主函数的属性测试
     - **Property 12: 无效数据不抛出异常**
@@ -157,9 +157,8 @@
     - 使用 mock 飞书 API
     - 测试完整的端到端流程
     - 测试配置错误处理
-    - 测试 FEISHU_ENABLED=false 的情况
     - 验证日志记录
-    - _Requirements: 3.1, 3.2, 3.3, 4.1, 4.4, 5.1, 5.2, 5.3, 5.4_
+    - _Requirements: 3.1, 3.2, 3.3, 4.1, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4_
 
 - [ ] 8. 在 `__init__.py` 中导出公共接口
   - 导出 `notify_feishu` 函数
@@ -184,13 +183,19 @@
   - 如有问题请询问用户
 
 - [ ] 11. 添加使用示例和文档
-  - [ ] 11.1 创建 `examples/notify_feishu_example.py`
-    - 展示如何使用 notify_feishu 函数
-    - 展示如何配置环境变量
-    - 展示如何处理返回结果
-    - 包含完整的可运行示例
+  - [ ] 11.1 创建 `src/examples/notify/notify.py` 主入口程序
+    - 提供 `main()` 作为 notify-feishu 的示例入口
+    - 构造 mock 的 Summary_Result 测试数据
+    - 调用 notify_feishu 并输出 success、message、statistics
+    - _Requirements: 7.1, 7.2, 7.3_
 
-  - [ ] 11.2 更新 README 或创建模块文档
+  - [ ] 11.2 为示例主入口添加 mock 发送验证
+    - 使用 mock（如 patch requests）模拟飞书鉴权与发送接口响应
+    - 在不依赖真实飞书网络调用的情况下验证发送流程
+    - 提供一条可执行的本地运行命令示例
+    - _Requirements: 7.4_
+
+  - [ ] 11.3 更新 README 或创建模块文档
     - 说明功能概述
     - 说明配置要求
     - 说明使用方法

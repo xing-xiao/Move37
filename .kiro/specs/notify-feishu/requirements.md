@@ -52,7 +52,8 @@
 1. WHEN Notification_System 发送消息 THEN THE Feishu_Bot SHALL 使用飞书机器人 API 发送消息到指定群聊
 2. WHEN 飞书 API 调用成功 THEN THE Notification_System SHALL 返回成功状态
 3. IF 飞书 API 调用失败 THEN THE Notification_System SHALL 返回错误信息
-4. WHEN 发送消息 THEN THE Feishu_Bot SHALL 使用配置的 Webhook URL 或 Bot Token
+4. WHEN 发送消息 THEN THE Feishu_Bot SHALL 使用配置的 App ID、App Secret 和 Chat Receive ID
+5. WHEN 未显式配置 Receive ID 类型 THEN THE Feishu_Bot SHALL 默认使用 `chat_id`
 
 ### Requirement 4: 配置管理
 
@@ -61,9 +62,10 @@
 #### Acceptance Criteria
 
 1. THE Notification_System SHALL 从环境变量或配置文件读取飞书机器人配置
-2. THE Notification_System SHALL 支持配置 Webhook URL 或 Bot Token
-3. THE Notification_System SHALL 支持配置目标群聊 ID（如需要）
-4. IF 必需的配置缺失 THEN THE Notification_System SHALL 抛出配置错误异常
+2. THE Notification_System SHALL 支持配置 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`
+3. THE Notification_System SHALL 支持配置 `FEISHU_CHAT_RECEIVE_ID`
+4. THE Notification_System SHALL 支持配置 `FEISHU_CHAT_RECEIVE_ID_TYPE`，默认值为 `chat_id`
+5. IF 必需的配置缺失 THEN THE Notification_System SHALL 抛出配置错误异常
 
 ### Requirement 5: 错误处理
 
@@ -89,3 +91,14 @@
 5. WHEN 解析单个来源 THEN THE Notification_System SHALL 正确遍历 items 数组中的所有文章
 6. WHEN 解析单个文章 THEN THE Notification_System SHALL 正确提取 title、url、published、processing_time、tokens_consumed、brief 和 summary 字段
 7. WHEN 解析单个文章 THEN THE Notification_System SHALL 正确识别处理成功或失败状态
+
+### Requirement 7: 示例主入口与 Mock 验证
+
+**User Story:** 作为开发者，我希望有一个可直接运行的主入口程序，并且能使用 mock 数据验证飞书通知发送流程，以便快速联调和演示。
+
+#### Acceptance Criteria
+
+1. THE Notification_System SHALL 提供示例主入口程序，路径为 `src/examples/notify/notify.py`
+2. WHEN 运行示例主入口 THEN THE program SHALL 使用 mock 的 `Summary_Result` 数据调用 `notify_feishu`
+3. WHEN 运行示例主入口 THEN THE program SHALL 输出发送结果（success、message、statistics）
+4. THE 示例程序 SHALL 支持 mock 发送模式，以便在无真实飞书网络调用时验证完整发送流程

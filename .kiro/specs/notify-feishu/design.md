@@ -41,7 +41,7 @@
 │                    ▼                                     │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │         Feishu Client                            │   │
-│  │  - 读取配置（Webhook URL / Bot Token）           │   │
+│  │  - 读取配置（App ID / App Secret / Chat ID）    │   │
 │  │  - 调用飞书 API 发送消息                          │   │
 │  │  - 处理 API 响应和错误                            │   │
 │  └─────────────────┬───────────────────────────────┘   │
@@ -155,16 +155,20 @@ class FeishuClient:
     
     def __init__(
         self,
-        webhook_url: Optional[str] = None,
-        bot_token: Optional[str] = None,
+        app_id: str,
+        app_secret: str,
+        chat_receive_id: str,
+        chat_receive_id_type: str = "chat_id",
         timeout: float = 30.0
     ):
         """
         初始化飞书客户端
         
         Args:
-            webhook_url: 飞书群机器人 Webhook URL
-            bot_token: 飞书机器人 Token（备用方案）
+            app_id: 飞书机器人应用 App ID
+            app_secret: 飞书机器人应用 App Secret
+            chat_receive_id: 目标群聊接收 ID
+            chat_receive_id_type: 接收 ID 类型，默认 "chat_id"
             timeout: API 请求超时时间（秒）
         """
     
@@ -184,47 +188,42 @@ class FeishuClient:
 ```
 
 **飞书 API 集成**:
-- 使用 Webhook 方式发送消息（推荐）
-- 消息格式使用 `post` 类型，`msg_type` 为 `interactive` 或 `text`
+- 使用应用凭证获取 `tenant_access_token`
+- 使用 `im/v1/messages` 接口发送消息到群聊
+- `receive_id_type` 默认使用 `chat_id`
+- 消息格式使用 `post` 或 `text` 类型
 - 支持 Markdown 格式的富文本消息
 - 处理 API 返回的错误码和错误信息
 
-**Webhook 请求格式**:
+**鉴权请求格式**:
 ```python
 {
-    "msg_type": "text",
-    "content": {
-        "text": "<消息内容>"
-    }
+    "app_id": "<FEISHU_APP_ID>",
+    "app_secret": "<FEISHU_APP_SECRET>"
 }
 ```
 
-或使用 Markdown 格式:
+**发送消息请求格式**:
 ```python
 {
-    "msg_type": "post",
-    "content": {
-        "post": {
-            "zh_cn": {
-                "title": "每日 AI 资讯简报",
-                "content": [
-                    [{"tag": "text", "text": "<消息内容>"}]
-                ]
-            }
-        }
-    }
+    "receive_id": "<FEISHU_CHAT_RECEIVE_ID>",
+    "msg_type": "text",
+    "content": "{\"text\":\"<消息内容>\"}"
 }
 ```
+
+发送 URL 示例：
+`https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id`
 
 ### 4. Configuration Manager
 
 **职责**: 管理飞书通知系统的配置
 
 **配置项**:
-- `FEISHU_WEBHOOK_URL`: 飞书群机器人 Webhook URL（必需）
-- `FEISHU_BOT_TOKEN`: 飞书机器人 Token（可选，备用方案）
-- `FEISHU_TIMEOUT`: API 请求超时时间，默认 30 秒
-- `FEISHU_ENABLED`: 是否启用飞书通知，默认 true
+- `FEISHU_APP_ID`: 飞书机器人应用 App ID（必需）
+- `FEISHU_APP_SECRET`: 飞书机器人应用 App Secret（必需）
+- `FEISHU_CHAT_RECEIVE_ID`: 目标群聊接收 ID（必需）
+- `FEISHU_CHAT_RECEIVE_ID_TYPE`: 接收 ID 类型（可选，默认 `chat_id`）
 
 **接口**:
 ```python
@@ -270,12 +269,36 @@ def notify_feishu(
 
 **实现流程**:
 1. 加载配置
-2. 检查是否启用飞书通知
-3. 计算统计信息
-4. 构建消息内容
-5. 创建 FeishuClient 实例
-6. 发送消息
+2. 计算统计信息
+3. 构建消息内容
+4. 创建 FeishuClient 实例
+5. 调用鉴权接口获取 token
+6. 调用消息接口发送消息
 7. 记录日志并返回结果
+
+### 6. Example Main Entry Program
+
+**职责**: 提供可直接运行的 notify-feishu 主入口程序，用于本地演示和联调。
+
+**文件路径**:
+- `src/examples/notify/notify.py`
+
+**接口**:
+```python
+def main() -> None:
+    """
+    示例主入口：
+    1. 构造 mock 的 Summary_Result
+    2. 调用 notify_feishu
+    3. 打印发送结果
+    """
+```
+
+**实现要点**:
+- 在示例程序内构造符合 `Summary Result Structure` 的 mock 数据
+- 调用 `notify_feishu(summary_result, config=None)`
+- 支持 mock 发送模式（例如通过参数或 patch requests），用于无真实飞书网络时验证发送流程
+- 输出 `success`、`message`、`statistics` 字段，便于快速确认行为
 
 ## Data Models
 
@@ -343,7 +366,7 @@ def notify_feishu(
 ### 错误类型
 
 1. **配置错误** (`ConfigurationError`)
-   - 缺少必需的配置项（如 FEISHU_WEBHOOK_URL）
+   - 缺少必需的配置项（如 FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_CHAT_RECEIVE_ID）
    - 配置格式不正确
 
 2. **数据解析错误** (`DataParseError`)
