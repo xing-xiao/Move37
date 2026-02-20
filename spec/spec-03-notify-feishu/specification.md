@@ -22,17 +22,3 @@
 - <文章2标题>
 ......
 ```
-
-## 2. Sample
-
-对summarize_all返回的结果增加内容如下
-```json
-{
-  "collection_date": "2026-02-18",
-  "target_date": "2026-02-14",
-  "processing_time": "xxx",
-  "results": [
-    ...
-  ]
-}
-```
