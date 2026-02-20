@@ -35,7 +35,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "youtube_transcript_langs": ["zh-Hans", "zh", "en"],
     "youtube_max_input_chars": 20000,
     "youtube_chunk_size": 4000,
-    "youtube_enable_metadata_fallback": True,
     "prompt_template": DEFAULT_PROMPT_TEMPLATE,
 }
 
@@ -112,23 +111,6 @@ def _to_int(value: Any, default: int, field_name: str) -> int:
         raise ConfigurationError(
             f"Invalid `{field_name}` value: {value!r}. Expected integer."
         ) from exc
-
-
-def _to_bool(value: Any, default: bool, field_name: str) -> bool:
-    if value is None or value == "":
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "n", "off"}:
-        return False
-    raise ConfigurationError(
-        f"Invalid `{field_name}` value: {value!r}. Expected boolean."
-    )
 
 
 def _to_list(value: Any, default: list[str]) -> list[str]:
@@ -245,15 +227,6 @@ def load_config(
     if youtube_chunk_size <= 0:
         raise ConfigurationError("`youtube_chunk_size` must be greater than 0.")
 
-    youtube_fallback_raw = overrides.get("youtube_enable_metadata_fallback")
-    if youtube_fallback_raw is None:
-        youtube_fallback_raw = _pick_value(env_values, "YOUTUBE_ENABLE_METADATA_FALLBACK")
-    youtube_enable_metadata_fallback = _to_bool(
-        youtube_fallback_raw,
-        bool(DEFAULT_CONFIG["youtube_enable_metadata_fallback"]),
-        "youtube_enable_metadata_fallback",
-    )
-
     prompt_template = str(
         overrides.get("prompt_template")
         or _pick_value(env_values, "LLM_PROMPT_TEMPLATE")
@@ -274,6 +247,5 @@ def load_config(
         "youtube_transcript_langs": youtube_langs,
         "youtube_max_input_chars": youtube_max_input_chars,
         "youtube_chunk_size": youtube_chunk_size,
-        "youtube_enable_metadata_fallback": youtube_enable_metadata_fallback,
         "prompt_template": prompt_template,
     }

@@ -4,7 +4,7 @@
 
 ### 目标1
 
-对summarize步骤中`summarize_all`返回的results的结果进行总结，并按照如下格式，由飞书机器人应用推送消息给飞书群。
+对summarize步骤中`summarize_all`返回的results的结果进行统计，并按照如下格式，由飞书机器人应用推送消息给飞书群。
 
 ```
 ## 执行结果总结

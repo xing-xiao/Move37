@@ -58,25 +58,15 @@ def fetch_youtube_summary_input(
     if not video_id:
         raise ValueError(f"Invalid YouTube URL, failed to extract video id: {url}")
 
-    langs = preferred_languages or ["zh-Hans", "zh", "en"]
     transcript_error = ""
-
     try:
-        transcript_text, transcript_lang = _fetch_youtube_transcript(video_id, langs)
-        content = _build_transcript_content(
+        return fetch_youtube_transcript_summary_input(
             url=url,
-            video_id=video_id,
             title=title,
             published=published,
-            transcript_text=transcript_text[:max_input_chars],
-            transcript_lang=transcript_lang,
+            preferred_languages=preferred_languages,
+            max_input_chars=max_input_chars,
         )
-        return {
-            "basis": "transcript",
-            "content": content,
-            "video_id": video_id,
-            "warning": None,
-        }
     except Exception as exc:  # noqa: BLE001
         transcript_error = f"{type(exc).__name__}: {exc}"
         LOGGER.warning("YouTube transcript unavailable for %s: %s", url, transcript_error)
@@ -103,6 +93,36 @@ def fetch_youtube_summary_input(
             "Transcript unavailable; summary is generated from metadata only. "
             f"transcript_error={transcript_error}"
         ),
+    }
+
+
+def fetch_youtube_transcript_summary_input(
+    url: str,
+    title: str = "",
+    published: str = "",
+    preferred_languages: Optional[List[str]] = None,
+    max_input_chars: int = 20000,
+) -> Dict[str, Any]:
+    """Fetch YouTube transcript only and build summary input payload."""
+    video_id = extract_youtube_video_id(url)
+    if not video_id:
+        raise ValueError(f"Invalid YouTube URL, failed to extract video id: {url}")
+
+    langs = preferred_languages or ["zh-Hans", "zh", "en"]
+    transcript_text, transcript_lang = _fetch_youtube_transcript(video_id, langs)
+    content = _build_transcript_content(
+        url=url,
+        video_id=video_id,
+        title=title,
+        published=published,
+        transcript_text=transcript_text[:max_input_chars],
+        transcript_lang=transcript_lang,
+    )
+    return {
+        "basis": "transcript",
+        "content": content,
+        "video_id": video_id,
+        "warning": None,
     }
 
 

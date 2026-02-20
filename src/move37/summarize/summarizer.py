@@ -7,11 +7,41 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-from .config import load_config
-from .content_fetcher import fetch_youtube_summary_input, is_youtube_url
+from .config import DEFAULT_CONFIG, ConfigurationError, load_config
+from .content_fetcher import (
+    extract_youtube_video_id,
+    fetch_youtube_transcript_summary_input,
+    is_youtube_url,
+)
 from .llm_client import LLMClient
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _create_llm_client(loaded_config: Dict[str, Any]) -> LLMClient:
+    return LLMClient(
+        provider=loaded_config["provider"],
+        api_key=loaded_config["api_key"],
+        model=loaded_config["model"],
+        base_url=loaded_config["base_url"],
+        temperature=loaded_config["temperature"],
+        max_tokens=loaded_config["max_tokens"],
+        timeout=loaded_config["timeout"],
+        max_retries=loaded_config["max_retries"],
+    )
+
+
+def _create_gemini_fallback_client(base_config: Dict[str, Any]) -> LLMClient:
+    gemini_config = load_config(
+        {
+            "provider": "gemini",
+            "temperature": base_config["temperature"],
+            "max_tokens": base_config["max_tokens"],
+            "timeout": base_config["timeout"],
+            "max_retries": base_config["max_retries"],
+        }
+    )
+    return _create_llm_client(gemini_config)
 
 
 def summarize_single_url(
@@ -88,16 +118,8 @@ def summarize_all(
         raise ValueError("`collection_result` must be a dictionary.")
 
     loaded_config = load_config(config)
-    llm_client = LLMClient(
-        provider=loaded_config["provider"],
-        api_key=loaded_config["api_key"],
-        model=loaded_config["model"],
-        base_url=loaded_config["base_url"],
-        temperature=loaded_config["temperature"],
-        max_tokens=loaded_config["max_tokens"],
-        timeout=loaded_config["timeout"],
-        max_retries=loaded_config["max_retries"],
-    )
+    llm_client = _create_llm_client(loaded_config)
+    gemini_fallback_client: LLMClient | None = None
     prompt_template = loaded_config["prompt_template"]
 
     output = copy.deepcopy(collection_result)
@@ -161,16 +183,16 @@ def summarize_all(
             extra_summary_fields: Dict[str, Any] = {}
             prepared_content: str | None = None
             chunk_size: int | None = None
+            active_client = llm_client
+            active_prompt_template = prompt_template
             if is_youtube_url(url):
                 try:
-                    youtube_input = fetch_youtube_summary_input(
+                    youtube_input = fetch_youtube_transcript_summary_input(
                         url=url,
                         title=title,
                         published=str(item.get("published") or ""),
                         preferred_languages=loaded_config["youtube_transcript_langs"],
                         max_input_chars=loaded_config["youtube_max_input_chars"],
-                        enable_metadata_fallback=loaded_config["youtube_enable_metadata_fallback"],
-                        timeout=loaded_config["timeout"],
                     )
                     prepared_content = str(youtube_input.get("content") or "")
                     chunk_size = int(loaded_config["youtube_chunk_size"])
@@ -178,29 +200,54 @@ def summarize_all(
                         "summary_basis": youtube_input.get("basis"),
                         "youtube_video_id": youtube_input.get("video_id"),
                     }
-                    if youtube_input.get("warning"):
-                        extra_summary_fields["warning"] = youtube_input["warning"]
                 except Exception as exc:  # noqa: BLE001
-                    LOGGER.error("YouTube prefetch failed for url=%s error=%s", url, exc)
-                    item.update(
-                        {
-                            "processing_time": "0.0s",
-                            "model_used": loaded_config["model"],
-                            "tokens_consumed": 0,
-                            "brief": "",
-                            "summary": "",
-                            "success": False,
-                            "error": f"YouTube content fetch failed: {exc}",
-                            "summary_basis": "none",
-                        }
+                    transcript_error = f"{type(exc).__name__}: {exc}"
+                    LOGGER.warning(
+                        "YouTube transcript unavailable for %s, fallback to Gemini URL summary. error=%s",
+                        url,
+                        transcript_error,
                     )
-                    continue
+                    if gemini_fallback_client is None:
+                        try:
+                            gemini_fallback_client = _create_gemini_fallback_client(loaded_config)
+                        except ConfigurationError as gemini_cfg_error:
+                            item.update(
+                                {
+                                    "processing_time": "0.0s",
+                                    "model_used": loaded_config["model"],
+                                    "tokens_consumed": 0,
+                                    "brief": "",
+                                    "summary": "",
+                                    "success": False,
+                                    "error": (
+                                        "YouTube transcript unavailable and Gemini fallback is not configured: "
+                                        f"{gemini_cfg_error}"
+                                    ),
+                                    "summary_basis": "none",
+                                }
+                            )
+                            continue
+
+                    active_client = gemini_fallback_client
+                    active_prompt_template = DEFAULT_CONFIG["prompt_template"]
+                    prepared_content = None
+                    chunk_size = None
+                    video_id = str(extract_youtube_video_id(url) or "")
+
+                    extra_summary_fields = {
+                        "summary_basis": "gemini_url_fallback",
+                        "youtube_video_id": video_id,
+                        "warning": (
+                            "Transcript unavailable; summary generated by Gemini with URL only. "
+                            f"transcript_error={transcript_error}"
+                        ),
+                    }
 
             summary = summarize_single_url(
                 url=url,
                 title=title,
-                llm_client=llm_client,
-                prompt_template=prompt_template,
+                llm_client=active_client,
+                prompt_template=active_prompt_template,
                 content=prepared_content,
                 chunk_size=chunk_size,
             )

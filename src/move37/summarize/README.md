@@ -5,7 +5,7 @@
 YouTube 链接会先抓取内容再总结：
 
 - 优先抓取字幕（transcript）
-- 字幕不可用时回退到元数据（metadata-only）
+- 字幕不可用时回退到 Gemini（默认 prompt + URL）
 - 超长字幕会先分块摘要，再汇总为最终摘要
 - Gemini 模型不可用时会自动尝试可用的 fallback 模型
 
@@ -68,6 +68,8 @@ LLM_GEMINI_MODEL=gemini-2.5-flash
 LLM_GEMINI_BASE_URL=
 ```
 
+说明：即使主 `LLM_PROVIDER` 不是 Gemini，YouTube 字幕抓取失败时也会用 Gemini 做 URL 回退摘要，因此仍建议配置这组 Gemini 参数。
+
 ### 3.4 配置示例（GLM）
 
 ```bash
@@ -95,8 +97,6 @@ YOUTUBE_TRANSCRIPT_LANGS=zh-Hans,zh,en
 YOUTUBE_MAX_INPUT_CHARS=20000
 # 超过该值启用分块摘要
 YOUTUBE_CHUNK_SIZE=4000
-# 字幕不可用时是否回退到 metadata-only 总结
-YOUTUBE_ENABLE_METADATA_FALLBACK=true
 ```
 
 ## 4. 配置加载规则
@@ -123,7 +123,6 @@ Provider 选择与读取规则：
    - `YOUTUBE_TRANSCRIPT_LANGS`
    - `YOUTUBE_MAX_INPUT_CHARS`
    - `YOUTUBE_CHUNK_SIZE`
-   - `YOUTUBE_ENABLE_METADATA_FALLBACK`
 
 ## 5. 运行方式
 
@@ -190,9 +189,9 @@ summary_result = summarize_all(
 
 YouTube 项额外可能包含：
 
-- `summary_basis`: `transcript` 或 `metadata`
+- `summary_basis`: `transcript` 或 `gemini_url_fallback`
 - `youtube_video_id`
-- `warning`（例如字幕不可用，已降级到 metadata-only）
+- `warning`（例如字幕不可用，已降级到 Gemini URL 摘要）
 
 ## 7. 日志与重试
 
