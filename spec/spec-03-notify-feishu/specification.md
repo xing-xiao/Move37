@@ -1,8 +1,10 @@
-# 推送飞书聊天群
+# 信息推送飞书聊天群
 
 ## 1. 目标
 
-对`src\move37\ingest\collection.py`的`collect_all`返回的results中的每一个url，使用大模型对链接地址所在的文章或视频进行总结概括，作为每日的AI咨询简报。
+目标1: 对summarize步骤中`summarize_all`返回的results中的每一个item条目，优美的格式化后使用一条飞书消息，消息内容包含，由飞书机器人应用推送消息给飞书群
+
+目标2: 对summarize步骤中`summarize_all`返回的results中的每一个item条目，在飞书指定知识库的目录下，创建名为`target_date`的docx类型文档，文档内容包括
 
 ## 2. 处理方法
 

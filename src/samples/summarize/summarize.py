@@ -41,7 +41,7 @@ SAMPLE_COLLECTION_RESULT: Dict[str, Any] = {
             "items": [
                 {
                     "title": "Example YouTube Video",
-                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "url": "https://www.youtube.com/watch?v=uvs1Igr4u6g",
                     "published": "2026-02-19T12:00:00Z",
                 }
             ],
