@@ -140,10 +140,17 @@ def _fetch_youtube_transcript(video_id: str, languages: List[str]) -> tuple[str,
 
     if hasattr(YouTubeTranscriptApi, "fetch"):
         fetched = None
+        api = None
         try:
             api = YouTubeTranscriptApi()
+        except TypeError:
+            # Some versions may not be directly instantiable.
+            api = None
+
+        if api is not None and hasattr(api, "fetch"):
+            # Do not swallow API/runtime errors here; propagate real transcript errors.
             fetched = api.fetch(video_id, languages=languages)
-        except Exception:  # noqa: BLE001
+        else:
             # Compatibility fallback for versions where fetch is a class/static method.
             fetched = YouTubeTranscriptApi.fetch(video_id, languages=languages)
 
