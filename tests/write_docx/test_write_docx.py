@@ -127,8 +127,8 @@ def test_write_to_feishu_docx_end_to_end_with_mock() -> None:
                 "app_secret": "secret_mock",
                 "wiki_space_id": "7600000000000000000",
                 "wiki_parent_node_token": "wikcn_parent",
-                # Force LLM init failure so test does not depend on real keys/network.
-                "llm_config": {"provider": "openai"},
+                # Disable blog LLM so test does not depend on real keys/network.
+                "disable_blog_llm": True,
             },
         )
 

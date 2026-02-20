@@ -62,11 +62,17 @@ def _flatten_content_items(summary_result: Dict[str, Any]) -> List[Dict[str, Any
 
 
 def _create_llm_deps(
-    llm_overrides: Optional[Dict[str, Any]] = None,
+    disable_blog_llm: bool = False,
 ) -> tuple[ArticleTranslator | _DisabledArticleTranslator, WeChatArticleGenerator | _DisabledWeChatGenerator, Optional[str]]:
+    if disable_blog_llm:
+        message = "Blog translation/generation disabled by `disable_blog_llm=true`."
+        LOGGER.warning(message)
+        return _DisabledArticleTranslator(message), _DisabledWeChatGenerator(message), message
+
     llm_error: Optional[str] = None
     try:
-        llm_loaded = load_llm_config(llm_overrides)
+        # Blog translation and WeChat generation strictly follow `.env` LLM_PROVIDER.
+        llm_loaded = load_llm_config()
         llm_client = LLMClient(
             provider=llm_loaded["provider"],
             api_key=llm_loaded["api_key"],
@@ -139,7 +145,9 @@ def write_to_feishu_docx(
         default_result["errors"].append(f"main_doc_create_failed: {exc}")
         return default_result
 
-    translator, wechat_generator, llm_error = _create_llm_deps(loaded_config.get("llm_config"))
+    translator, wechat_generator, llm_error = _create_llm_deps(
+        disable_blog_llm=bool(loaded_config.get("disable_blog_llm", False))
+    )
 
     blog_processor = BlogArticleProcessor(
         document_manager=document_manager,

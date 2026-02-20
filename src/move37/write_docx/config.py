@@ -75,6 +75,22 @@ def _to_int(value: Any, default: int, field_name: str) -> int:
     return resolved
 
 
+def _to_bool(value: Any, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ConfigurationError(
+        f"Invalid boolean value: {value!r}. Supported true/false variants."
+    )
+
+
 def load_write_docx_config(
     config: Optional[Dict[str, Any]] = None,
     env_path: Optional[str | Path] = None,
@@ -151,7 +167,12 @@ def load_write_docx_config(
         base_url = str(DEFAULT_CONFIG["base_url"])
     base_url = base_url.rstrip("/")
 
-    llm_config = overrides.get("llm_config")
+    disable_blog_llm_raw = (
+        overrides.get("disable_blog_llm")
+        or overrides.get("FEISHU_DOCX_DISABLE_BLOG_LLM")
+        or _pick_value(env_values, "FEISHU_DOCX_DISABLE_BLOG_LLM")
+    )
+    disable_blog_llm = _to_bool(disable_blog_llm_raw, default=False)
 
     return {
         "app_id": app_id,
@@ -161,5 +182,5 @@ def load_write_docx_config(
         "timeout": timeout,
         "max_retries": max_retries,
         "base_url": base_url,
-        "llm_config": llm_config,
+        "disable_blog_llm": disable_blog_llm,
     }

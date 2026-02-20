@@ -109,7 +109,7 @@ def _build_override_config(args: argparse.Namespace) -> Dict[str, Any]:
         "wiki_parent_node_token": args.parent_node_token,
     }
     if args.disable_llm:
-        config["llm_config"] = {"provider": "openai"}
+        config["disable_blog_llm"] = True
     return config
 
 
@@ -127,7 +127,7 @@ def main() -> None:
     parser.add_argument(
         "--disable-llm",
         action="store_true",
-        help="Disable LLM calls for blog translation/generation by passing invalid llm config.",
+        help="Disable blog translation/generation LLM calls.",
     )
     args = parser.parse_args()
 
