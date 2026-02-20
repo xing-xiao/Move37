@@ -281,7 +281,7 @@ def notify_feishu(
 **职责**: 提供可直接运行的 notify-feishu 主入口程序，用于本地演示和联调。
 
 **文件路径**:
-- `src/examples/notify/notify.py`
+- `src/samples/notify/notify.py`
 
 **接口**:
 ```python

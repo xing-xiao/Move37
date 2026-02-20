@@ -98,7 +98,7 @@
 
 #### Acceptance Criteria
 
-1. THE Notification_System SHALL 提供示例主入口程序，路径为 `src/examples/notify/notify.py`
+1. THE Notification_System SHALL 提供示例主入口程序，路径为 `src/samples/notify/notify.py`
 2. WHEN 运行示例主入口 THEN THE program SHALL 使用 mock 的 `Summary_Result` 数据调用 `notify_feishu`
 3. WHEN 运行示例主入口 THEN THE program SHALL 输出发送结果（success、message、statistics）
 4. THE 示例程序 SHALL 支持 mock 发送模式，以便在无真实飞书网络调用时验证完整发送流程

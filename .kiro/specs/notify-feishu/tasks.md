@@ -183,7 +183,7 @@
   - 如有问题请询问用户
 
 - [ ] 11. 添加使用示例和文档
-  - [ ] 11.1 创建 `src/examples/notify/notify.py` 主入口程序
+  - [ ] 11.1 创建 `src/samples/notify/notify.py` 主入口程序
     - 提供 `main()` 作为 notify-feishu 的示例入口
     - 构造 mock 的 Summary_Result 测试数据
     - 调用 notify_feishu 并输出 success、message、statistics
