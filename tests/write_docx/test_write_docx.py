@@ -10,6 +10,7 @@ import requests
 
 from move37.write_docx.config import load_write_docx_config
 from move37.write_docx.errors import ConfigurationError
+from move37.write_docx.feishu_client import FeishuAPIClient
 from move37.write_docx.sub_document_builder import SubDocumentBuilder
 from move37.write_docx.writer import write_to_feishu_docx
 
@@ -141,3 +142,46 @@ def test_write_to_feishu_docx_end_to_end_with_mock() -> None:
     assert detail["sub_doc_token"]
     assert detail["translation_doc_token"]
     assert detail["wechat_doc_token"]
+
+
+def test_create_wiki_node_auto_resolves_non_wiki_parent_token() -> None:
+    client = FeishuAPIClient(
+        app_id="cli_mock",
+        app_secret="secret_mock",
+        timeout=10,
+        max_retries=1,
+        base_url="https://open.feishu.cn",
+    )
+
+    def mock_post(url: str, json: Dict[str, Any] | None = None, **_: Any) -> _MockResponse:
+        if url.endswith("/open-apis/auth/v3/tenant_access_token/internal"):
+            return _MockResponse({"code": 0, "msg": "ok", "tenant_access_token": "token"})
+
+        if "/open-apis/wiki/v2/spaces/" in url and url.endswith("/nodes"):
+            parent = (json or {}).get("parent_node_token")
+            if parent == "CzovwU3CaiVcXgk418acWqBKnLh":
+                return _MockResponse({"code": 10003, "msg": "invalid param"}, status_code=200)
+            return _MockResponse({"code": 0, "msg": "ok", "data": {"node_token": "wikcn_created"}})
+
+        return _MockResponse({"code": 404, "msg": "not found"}, status_code=404)
+
+    def mock_get(url: str, params: Dict[str, Any] | None = None, **_: Any) -> _MockResponse:
+        if url.endswith("/open-apis/wiki/v2/spaces/get_node"):
+            if (params or {}).get("token") == "CzovwU3CaiVcXgk418acWqBKnLh":
+                return _MockResponse(
+                    {
+                        "code": 0,
+                        "msg": "ok",
+                        "data": {"node": {"node_token": "wikcn_parent_resolved"}},
+                    }
+                )
+        return _MockResponse({"code": 404, "msg": "not found"}, status_code=404)
+
+    with patch("requests.post", side_effect=mock_post), patch("requests.get", side_effect=mock_get):
+        token = client.create_wiki_node(
+            space_id="7600000000000000000",
+            parent_node_token="CzovwU3CaiVcXgk418acWqBKnLh",
+            title="2026-02-19",
+        )
+
+    assert token == "wikcn_created"
