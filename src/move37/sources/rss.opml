@@ -7,13 +7,10 @@
     <outline sourceType="Youtube Channels">
     </outline>
     <outline sourceType="Blogs">
+      <outline type="rss" text="rsshub.app/anthropic/research" xmlUrl="https://rsshub.app/anthropic/research"/>
+      <outline type="rss" text="latent.space" xmlUrl="https://www.latent.space/feed"/>
       <outline type="rss" text="simonwillison.net" xmlUrl="https://simonwillison.net/atom/everything/"/>
       <outline type="rss" text="jeffgeerling.com" xmlUrl="https://www.jeffgeerling.com/blog.xml"/>
-      <outline type="rss" text="seangoedecke.com" xmlUrl="https://www.seangoedecke.com/rss.xml"/>
-      <outline type="rss" text="krebsonsecurity.com" xmlUrl="https://krebsonsecurity.com/feed/"/>
-      <outline type="rss" text="daringfireball.net" xmlUrl="https://daringfireball.net/feeds/main"/>
-      <outline type="rss" text="ericmigi.com" xmlUrl="https://ericmigi.com/rss.xml"/>
-      <outline type="rss" text="tedunangst.com" xmlUrl="https://www.tedunangst.com/flak/rss"/>
     </outline>
   </body>
 </opml>

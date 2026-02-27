@@ -35,6 +35,31 @@ def _validate_pipeline_result(name: str, data: Dict[str, Any]) -> None:
         raise ValueError(f"{name}.results must be a list.")
 
 
+def _extract_wiki_url(write_result: Dict[str, Any]) -> str:
+    if not isinstance(write_result, dict):
+        return ""
+    direct_url = str(
+        write_result.get("wiki_url")
+        or write_result.get("wiki_node_url")
+        or write_result.get("url")
+        or ""
+    ).strip()
+    if direct_url:
+        return direct_url
+
+    created = write_result.get("create_response")
+    if isinstance(created, dict):
+        node = created.get("node")
+        if isinstance(node, dict):
+            node_url = str(node.get("wiki_node_url") or node.get("url") or "").strip()
+            if node_url:
+                return node_url
+        created_url = str(created.get("wiki_node_url") or created.get("url") or "").strip()
+        if created_url:
+            return created_url
+    return ""
+
+
 def _run_once(target_date: str | None = None, max_sources: int | None = None) -> Dict[str, Any]:
     started_at = time.time()
     steps: List[Dict[str, Any]] = []
@@ -103,31 +128,22 @@ def _run_once(target_date: str | None = None, max_sources: int | None = None) ->
             "duration_seconds": round(time.time() - started_at, 2),
         }
 
-    # Step 3: notify (fail-open)
-    step_started = time.time()
-    notify_result = notify_feishu(summary_result)
-    notify_success = bool(notify_result.get("success"))
-    if not notify_success:
-        errors.append(f"notify failed: {notify_result.get('message')}")
-    steps.append(
-        {
-            "step": "notify",
-            "success": notify_success,
-            "duration_seconds": round(time.time() - step_started, 2),
-            "message": str(notify_result.get("message") or ""),
-        }
-    )
+    notify_payload = dict(summary_result)
 
-    # Step 4: write docx (always run after summarize)
+    # Step 3: write docx (run before notify to include wiki url)
     step_started = time.time()
     try:
         write_result = write_to_feishu_docx(summary_result)
+        wiki_url = _extract_wiki_url(write_result)
+        if wiki_url:
+            notify_payload["wiki_url"] = wiki_url
         steps.append(
             {
                 "step": "write_docx",
                 "success": bool(write_result.get("success", True)),
                 "duration_seconds": round(time.time() - step_started, 2),
                 "document_id": write_result.get("document_id"),
+                "wiki_url": wiki_url if wiki_url else None,
             }
         )
     except Exception as exc:  # noqa: BLE001
@@ -141,6 +157,21 @@ def _run_once(target_date: str | None = None, max_sources: int | None = None) ->
                 "error": error,
             }
         )
+
+    # Step 4: notify (fail-open)
+    step_started = time.time()
+    notify_result = notify_feishu(notify_payload)
+    notify_success = bool(notify_result.get("success"))
+    if not notify_success:
+        errors.append(f"notify failed: {notify_result.get('message')}")
+    steps.append(
+        {
+            "step": "notify",
+            "success": notify_success,
+            "duration_seconds": round(time.time() - step_started, 2),
+            "message": str(notify_result.get("message") or ""),
+        }
+    )
 
     return {
         "success": not any(step.get("success") is False for step in steps[:2]) and len(errors) == 0,

@@ -45,20 +45,36 @@ def build_message(summary_result: Dict[str, Any], statistics: Dict[str, Any]) ->
     total_time_minutes = _to_int(statistics.get("total_time_minutes"))
     total_time_seconds = _to_int(statistics.get("total_time_seconds"))
     total_tokens = _to_int(statistics.get("total_tokens"))
+    models_used = sorted(
+        {
+            str(item.get("model_used") or "").strip()
+            for _, item in _iter_items(summary_result)
+            if str(item.get("model_used") or "").strip()
+        }
+    )
 
     collection_date = str(summary_result.get("collection_date") or "").strip()
     target_date = str(summary_result.get("target_date") or "").strip()
+    wiki_url = str(
+        summary_result.get("wiki_url")
+        or summary_result.get("wiki_node_url")
+        or summary_result.get("wiki_doc_url")
+        or summary_result.get("url")
+        or ""
+    ).strip()
 
     lines = [
-        "## 执行结果总结",
-        f"- 处理文章/视频数：{total_count}个，成功{success_count}个，失败{failure_count}个",
-        f"- 执行时间：{total_time_minutes}分{total_time_seconds}秒",
+        "## Move37今日安全咨询概览",
+        f"- 为您提供文章咨询：{total_count}个，处理成功{success_count}个，处理失败{failure_count}个",
+        f"- 程序执行耗时：{total_time_minutes}分{total_time_seconds}秒",
         f"- 消耗Token：{total_tokens}个",
     ]
+    if models_used:
+        lines.append(f"- 使用模型：{', '.join(models_used)}")
+    if wiki_url:
+        lines.append(f"- 详情请查看飞书wiki：{wiki_url}")
     if target_date:
-        lines.append(f"- 目标日期：{target_date}")
-    if collection_date:
-        lines.append(f"- 收集日期：{collection_date}")
+        lines.append(f"- 文章发表日期：{target_date}")
 
     lines.append("")
     lines.append("## 文章清单")
@@ -89,11 +105,9 @@ def build_message(summary_result: Dict[str, Any], statistics: Dict[str, Any]) ->
         lines.extend(
             [
                 f"- {title}",
-                f"  * 来源：{source_label}",
-                f"  * 原文链接：{url}",
-                f"  * 消耗Token：{tokens_consumed}个",
                 f"  * 文章简介：{brief}",
-                f"  * 处理结果：{status_text}",
+                f"  * 原文链接：{url}",
+                f"  * 处理结果：{status_text}，消耗Token：{tokens_consumed}个",
             ]
         )
 

@@ -22,6 +22,46 @@ def _build_doc_title(summary_result: Dict[str, Any]) -> str:
     return f"{target_date}咨询摘要"
 
 
+def _join_url(base_url: str, path: str) -> str:
+    base = str(base_url or "").strip().rstrip("/")
+    if not base:
+        return ""
+    suffix = str(path or "").strip()
+    if not suffix:
+        return base
+    if not suffix.startswith("/"):
+        suffix = f"/{suffix}"
+    return f"{base}{suffix}"
+
+
+def _resolve_wiki_url(
+    created: Dict[str, Any],
+    node_token: str,
+    document_id: str,
+    workspace_base_url: str,
+) -> str:
+    node = created.get("node") if isinstance(created, dict) else None
+    if isinstance(node, dict):
+        direct_url = str(node.get("wiki_node_url") or node.get("url") or "").strip()
+        if direct_url:
+            return direct_url
+    if isinstance(created, dict):
+        direct_url = str(created.get("wiki_node_url") or created.get("url") or "").strip()
+        if direct_url:
+            return direct_url
+
+    resolved_base = str(workspace_base_url or "").strip().rstrip("/")
+    if node_token:
+        if resolved_base:
+            return _join_url(resolved_base, f"/wiki/{node_token}")
+        return f"https://feishu.cn/wiki/{node_token}"
+    if document_id:
+        if resolved_base:
+            return _join_url(resolved_base, f"/docx/{document_id}")
+        return f"https://feishu.cn/docx/{document_id}"
+    return ""
+
+
 def _build_children_blocks(summary_result: Dict[str, Any]) -> List[Dict[str, Any]]:
     children: List[Dict[str, Any]] = []
     for source in summary_result.get("results", []):
@@ -118,6 +158,7 @@ class FeishuWikiWriter:
         parent_node_token: str,
         title: Optional[str] = None,
         dry_run: bool = False,
+        workspace_base_url: str = "",
     ) -> Dict[str, Any]:
         _validate_summary_result(summary_result)
 
@@ -161,6 +202,13 @@ class FeishuWikiWriter:
         if not document_id:
             raise RuntimeError("create_docx response missing obj_token(document_id).")
 
+        wiki_url = _resolve_wiki_url(
+            created=created,
+            node_token=node_token,
+            document_id=document_id,
+            workspace_base_url=workspace_base_url,
+        )
+
         # NOTE:
         # docx descendant API requires a docx block id.
         # `node_token` is a wiki node identifier and may fail validation here.
@@ -175,6 +223,7 @@ class FeishuWikiWriter:
             "title": doc_title,
             "document_id": document_id,
             "node_token": node_token,
+            "wiki_url": wiki_url,
             "create_response": created,
             "write_response": write_result,
             "children_count": len(children),
@@ -197,6 +246,9 @@ def write_to_feishu_docx(
     base_url = str(overrides.get("base_url") or "https://open.feishu.cn").strip()
     dry_run = bool(overrides.get("dry_run", False))
     title = overrides.get("title")
+    workspace_base_url = str(
+        overrides.get("workspace_base_url") or os.getenv("FEISHU_WORKSPACE_BASE_URL", "")
+    ).strip()
 
     if not app_id:
         raise ValueError("Missing required config: FEISHU_APP_ID")
@@ -220,4 +272,5 @@ def write_to_feishu_docx(
         parent_node_token=parent_node_token,
         title=str(title).strip() if title is not None else None,
         dry_run=dry_run,
+        workspace_base_url=workspace_base_url,
     )
