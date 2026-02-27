@@ -1,186 +1,219 @@
-"""Main writer entry for write-feishu-docx."""
+"""Feishu wiki writer built on move37.utils.feishu.FeishuClient."""
 
 from __future__ import annotations
 
-import copy
-import logging
+import os
 from typing import Any, Dict, List, Optional
 
-from move37.summarize.config import ConfigurationError as LLMConfigurationError
-from move37.summarize.config import load_config as load_llm_config
-from move37.summarize.llm_client import LLMClient
-
-from .blog_processor import BlogArticleProcessor
-from .config import load_write_docx_config
-from .content_extractor import ContentExtractor
-from .content_processor import ContentProcessor
-from .document_manager import DocumentManager
-from .errors import ConfigurationError, DocumentOperationError, LLMError
-from .feishu_client import FeishuAPIClient
-from .translator import ArticleTranslator
-from .wechat_generator import WeChatArticleGenerator
-
-LOGGER = logging.getLogger(__name__)
+from move37.utils.feishu import FeishuClient
 
 
-class _DisabledArticleTranslator:
-    def __init__(self, reason: str) -> None:
-        self.reason = reason
-
-    def translate_article(self, content: str) -> str:
-        raise LLMError(self.reason)
-
-
-class _DisabledWeChatGenerator:
-    def __init__(self, reason: str) -> None:
-        self.reason = reason
-
-    def generate_wechat_article(self, content: str) -> str:
-        raise LLMError(self.reason)
+def _validate_summary_result(summary_result: Dict[str, Any]) -> None:
+    if not isinstance(summary_result, dict):
+        raise ValueError("`summary_result` must be a dictionary.")
+    if not isinstance(summary_result.get("results"), list):
+        raise ValueError("`summary_result.results` must be a list.")
 
 
-def _flatten_content_items(summary_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
+def _build_doc_title(summary_result: Dict[str, Any]) -> str:
+    target_date = str(summary_result.get("target_date") or "").strip()
+    if not target_date:
+        return "每日咨询摘要"
+    return f"{target_date}咨询摘要"
+
+
+def _build_children_blocks(summary_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    children: List[Dict[str, Any]] = []
     for source in summary_result.get("results", []):
         if not isinstance(source, dict):
             continue
-        source_type = source.get("source_type")
-        source_title = source.get("source_title")
-        source_success = source.get("success", True)
-        source_items = source.get("items")
-        if source_success is False or not isinstance(source_items, list):
+
+        source_title = str(source.get("source_title") or "Unknown").strip()
+        source_type = str(source.get("source_type") or "Unknown").strip()
+        source_heading = f"{source_title} ({source_type})"
+
+        children.append(
+            {
+                "block_type": 3,
+                "heading1": {"elements": [{"text_run": {"content": source_heading}}]},
+            }
+        )
+
+        items = source.get("items", [])
+        if not isinstance(items, list):
             continue
 
-        for raw_item in source_items:
-            if not isinstance(raw_item, dict):
+        for item in items:
+            if not isinstance(item, dict):
                 continue
-            item = copy.deepcopy(raw_item)
-            item["source_type"] = source_type
-            item["source_title"] = source_title
-            items.append(item)
-    return items
+
+            title = str(item.get("title") or "未命名内容").strip()
+            url = str(item.get("url") or "").strip() or "N/A"
+            published = str(item.get("published") or "").strip() or "N/A"
+            model_used = str(item.get("model_used") or "").strip() or "N/A"
+            processing_time = str(item.get("processing_time") or "").strip() or "N/A"
+            tokens = str(item.get("tokens_consumed") or "0").strip()
+            brief = str(item.get("brief") or "").strip()
+            summary = str(item.get("summary") or "").strip()
+            success = bool(item.get("success"))
+            error = str(item.get("error") or "").strip()
+
+            children.append(
+                {
+                    "block_type": 4,
+                    "heading2": {"elements": [{"text_run": {"content": title}}]},
+                }
+            )
+            children.append(
+                {
+                    "block_type": 2,
+                    "paragraph": {
+                        "elements": [
+                            {
+                                "text_run": {
+                                    "content": (
+                                        f"链接: {url}\n发布时间: {published}\n模型: {model_used}\n"
+                                        f"耗时: {processing_time}\nToken: {tokens}"
+                                    )
+                                }
+                            }
+                        ]
+                    },
+                }
+            )
+            if brief:
+                children.append(
+                    {
+                        "block_type": 5,
+                        "quote": {"elements": [{"text_run": {"content": brief}}]},
+                    }
+                )
+            if summary:
+                children.append(
+                    {
+                        "block_type": 2,
+                        "paragraph": {"elements": [{"text_run": {"content": summary}}]},
+                    }
+                )
+            if (not success) and error:
+                children.append(
+                    {
+                        "block_type": 5,
+                        "quote": {"elements": [{"text_run": {"content": f"失败原因: {error}"}}]},
+                    }
+                )
+    return children
 
 
-def _create_llm_deps(
-    disable_blog_llm: bool = False,
-) -> tuple[ArticleTranslator | _DisabledArticleTranslator, WeChatArticleGenerator | _DisabledWeChatGenerator, Optional[str]]:
-    if disable_blog_llm:
-        message = "Blog translation/generation disabled by `disable_blog_llm=true`."
-        LOGGER.warning(message)
-        return _DisabledArticleTranslator(message), _DisabledWeChatGenerator(message), message
+class FeishuWikiWriter:
+    """Write summary_result into Feishu wiki/docx."""
 
-    llm_error: Optional[str] = None
-    try:
-        # Blog translation and WeChat generation strictly follow `.env` LLM_PROVIDER.
-        llm_loaded = load_llm_config()
-        llm_client = LLMClient(
-            provider=llm_loaded["provider"],
-            api_key=llm_loaded["api_key"],
-            model=llm_loaded["model"],
-            base_url=llm_loaded["base_url"],
-            temperature=llm_loaded["temperature"],
-            max_tokens=llm_loaded["max_tokens"],
-            timeout=llm_loaded["timeout"],
-            max_retries=llm_loaded["max_retries"],
+    def __init__(self, client: FeishuClient) -> None:
+        self.client = client
+
+    def write_summary_to_wiki(
+        self,
+        summary_result: Dict[str, Any],
+        space_id: str,
+        parent_node_token: str,
+        title: Optional[str] = None,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        _validate_summary_result(summary_result)
+
+        resolved_space_id = str(space_id or "").strip()
+        resolved_parent_token = str(parent_node_token or "").strip()
+        if not resolved_space_id:
+            raise ValueError("`space_id` is required.")
+        if not resolved_parent_token:
+            raise ValueError("`parent_node_token` is required.")
+
+        doc_title = str(title or _build_doc_title(summary_result)).strip()
+        if not doc_title:
+            doc_title = "每日咨询摘要"
+
+        children = _build_children_blocks(summary_result)
+        if dry_run:
+            return {
+                "success": True,
+                "dry_run": True,
+                "title": doc_title,
+                "children_count": len(children),
+            }
+
+        created = self.client.create_docx(
+            space_id=resolved_space_id,
+            parent_node_token=resolved_parent_token,
+            node_name="origin",
+            title=doc_title,
         )
-        return ArticleTranslator(llm_client), WeChatArticleGenerator(llm_client), None
-    except (LLMConfigurationError, ValueError) as exc:
-        llm_error = (
-            "LLM configuration is invalid for blog translation/generation: "
-            f"{exc}"
+        node = created.get("node") if isinstance(created, dict) else None
+        node_token = ""
+        if isinstance(node, dict):
+            node_token = str(node.get("node_token") or "").strip()
+        document_id = ""
+        if isinstance(node, dict):
+            document_id = str(node.get("obj_token") or "").strip()
+        if not document_id:
+            document_id = str(created.get("obj_token") or "").strip() if isinstance(created, dict) else ""
+        if not node_token:
+            node_token = str(created.get("node_token") or "").strip() if isinstance(created, dict) else ""
+        if not document_id or not node_token:
+            raise RuntimeError("create_docx response missing node_token or obj_token.")
+
+        write_result = self.client.write_docx_content(
+            document_id=document_id,
+            block_id=node_token,
+            children=children,
         )
-        LOGGER.warning(llm_error)
-        return _DisabledArticleTranslator(llm_error), _DisabledWeChatGenerator(llm_error), llm_error
+        return {
+            "success": True,
+            "title": doc_title,
+            "document_id": document_id,
+            "node_token": node_token,
+            "create_response": created,
+            "write_response": write_result,
+            "children_count": len(children),
+        }
 
 
 def write_to_feishu_docx(
     summary_result: Dict[str, Any],
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Write summarize result to Feishu wiki documents."""
-    default_result = {
-        "success": False,
-        "main_doc_token": None,
-        "main_doc_url": None,
-        "processed": 0,
-        "successful": 0,
-        "failed": 0,
-        "details": [],
-        "errors": [],
-    }
+    """Public API for all-in-one workflow step 4."""
+    overrides = dict(config or {})
+    app_id = str(overrides.get("app_id") or os.getenv("FEISHU_APP_ID", "")).strip()
+    app_secret = str(overrides.get("app_secret") or os.getenv("FEISHU_APP_SECRET", "")).strip()
+    space_id = str(overrides.get("space_id") or os.getenv("FEISHU_WIKI_SPACE_ID", "")).strip()
+    parent_node_token = str(
+        overrides.get("parent_node_token") or os.getenv("FEISHU_WIKI_PARENT_NODE_TOKEN", "")
+    ).strip()
+    timeout = float(overrides.get("timeout") or 30.0)
+    base_url = str(overrides.get("base_url") or "https://open.feishu.cn").strip()
+    dry_run = bool(overrides.get("dry_run", False))
+    title = overrides.get("title")
 
-    if not isinstance(summary_result, dict):
-        default_result["errors"].append("summary_result must be a dictionary")
-        return default_result
+    if not app_id:
+        raise ValueError("Missing required config: FEISHU_APP_ID")
+    if not app_secret:
+        raise ValueError("Missing required config: FEISHU_APP_SECRET")
+    if not space_id:
+        raise ValueError("Missing required config: FEISHU_WIKI_SPACE_ID")
+    if not parent_node_token:
+        raise ValueError("Missing required config: FEISHU_WIKI_PARENT_NODE_TOKEN")
 
-    target_date = str(summary_result.get("target_date") or "").strip()
-    if not target_date:
-        default_result["errors"].append("summary_result.target_date is required")
-        return default_result
-
-    try:
-        loaded_config = load_write_docx_config(config)
-    except ConfigurationError as exc:
-        default_result["errors"].append(f"configuration_error: {exc}")
-        return default_result
-
-    feishu_client = FeishuAPIClient(
-        app_id=loaded_config["app_id"],
-        app_secret=loaded_config["app_secret"],
-        timeout=loaded_config["timeout"],
-        max_retries=loaded_config["max_retries"],
-        base_url=loaded_config["base_url"],
+    client = FeishuClient(
+        app_id=app_id,
+        app_secret=app_secret,
+        timeout=timeout,
+        base_url=base_url,
     )
-    document_manager = DocumentManager(
-        feishu_client=feishu_client,
-        space_id=loaded_config["wiki_space_id"],
+    writer = FeishuWikiWriter(client)
+    return writer.write_summary_to_wiki(
+        summary_result=summary_result,
+        space_id=space_id,
+        parent_node_token=parent_node_token,
+        title=str(title).strip() if title is not None else None,
+        dry_run=dry_run,
     )
-
-    try:
-        main_doc_token = document_manager.create_main_document(
-            title=target_date,
-            parent_node_token=loaded_config["wiki_parent_node_token"],
-        )
-    except DocumentOperationError as exc:
-        default_result["errors"].append(f"main_doc_create_failed: {exc}")
-        return default_result
-
-    translator, wechat_generator, llm_error = _create_llm_deps(
-        disable_blog_llm=bool(loaded_config.get("disable_blog_llm", False))
-    )
-
-    blog_processor = BlogArticleProcessor(
-        document_manager=document_manager,
-        content_extractor=ContentExtractor(timeout=loaded_config["timeout"]),
-        translator=translator,
-        wechat_generator=wechat_generator,
-    )
-    content_processor = ContentProcessor(
-        document_manager=document_manager,
-        blog_processor=blog_processor,
-    )
-
-    content_items = _flatten_content_items(summary_result)
-    LOGGER.info("write_to_feishu_docx start target_date=%s items=%s", target_date, len(content_items))
-
-    process_result = content_processor.process_content_items(
-        main_doc_token=main_doc_token,
-        content_items=content_items,
-    )
-
-    errors = list(process_result.get("errors", []))
-    if llm_error:
-        errors.append(llm_error)
-
-    failed_count = int(process_result.get("failed", 0) or 0)
-
-    return {
-        "success": failed_count == 0,
-        "main_doc_token": main_doc_token,
-        "main_doc_url": document_manager.build_document_url(main_doc_token),
-        "processed": int(process_result.get("processed", 0) or 0),
-        "successful": int(process_result.get("successful", 0) or 0),
-        "failed": failed_count,
-        "details": process_result.get("details", []),
-        "errors": errors,
-    }

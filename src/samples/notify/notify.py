@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import patch
 
-import requests
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
@@ -66,40 +64,14 @@ SAMPLE_SUMMARY_RESULT: Dict[str, Any] = {
 }
 
 
-class _MockResponse:
-    def __init__(self, payload: Dict[str, Any], status_code: int = 200) -> None:
-        self._payload = payload
-        self.status_code = status_code
-
-    def json(self) -> Dict[str, Any]:
-        return self._payload
-
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            raise requests.HTTPError(f"HTTP {self.status_code}")
-
-
-def _mock_requests_post(url: str, json: Dict[str, Any] | None = None, **_: Any) -> _MockResponse:
-    if url.endswith("/open-apis/auth/v3/tenant_access_token/internal"):
-        return _MockResponse(
-            {"code": 0, "msg": "ok", "tenant_access_token": "t-mock-token"},
-            status_code=200,
-        )
-
-    if "/open-apis/im/v1/messages" in url:
-        return _MockResponse(
-            {
-                "code": 0,
-                "msg": "ok",
-                "data": {
-                    "message_id": "om_mock_message_id",
-                    "echo_content": json,
-                },
-            },
-            status_code=200,
-        )
-
-    return _MockResponse({"code": 404, "msg": "not found"}, status_code=404)
+def _mock_send_group_notify(**_: Any) -> Dict[str, Any]:
+    return {
+        "code": 0,
+        "msg": "ok",
+        "data": {
+            "message_id": "om_mock_message_id",
+        },
+    }
 
 
 def _build_override_config(args: argparse.Namespace) -> Dict[str, Any]:
@@ -162,7 +134,10 @@ def main() -> None:
             "chat_receive_id_type": "chat_id",
         }
         mock_config.update(override_config)
-        with patch("requests.post", side_effect=_mock_requests_post):
+        with patch(
+            "move37.notify.notifier.FeishuClient.send_group_notify",
+            side_effect=_mock_send_group_notify,
+        ):
             result = notify_feishu(sample_payload, config=mock_config)
 
     print(f"success: {result.get('success')}")

@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
+from move37.utils.feishu import FeishuClient
+from move37.utils.feishu import FeishuClientError, FeishuMessageError
+
 from .config import load_feishu_config
 from .errors import ConfigurationError, DataParseError
-from .feishu_client import FeishuClient
 from .message_builder import build_message
 from .statistics import calculate_statistics
 
@@ -75,12 +77,34 @@ def notify_feishu(
     client = FeishuClient(
         app_id=loaded_config["app_id"],
         app_secret=loaded_config["app_secret"],
-        chat_receive_id=loaded_config["chat_receive_id"],
-        chat_receive_id_type=loaded_config["chat_receive_id_type"],
         timeout=loaded_config["timeout"],
         base_url=loaded_config["base_url"],
     )
-    send_result = client.send_message(message)
+    try:
+        response_payload = client.send_group_notify(
+            content=message,
+            receive_id=loaded_config["chat_receive_id"],
+            msg_type="text",
+            receive_id_type=loaded_config["chat_receive_id_type"],
+        )
+        data = response_payload.get("data")
+        message_id = ""
+        if isinstance(data, dict):
+            message_id = str(data.get("message_id") or "").strip()
+        success_message = "Feishu message sent successfully."
+        if message_id:
+            success_message = f"Feishu message sent successfully. message_id={message_id}"
+        send_result: Dict[str, Any] = {
+            "success": True,
+            "message": success_message,
+            "response": response_payload,
+        }
+    except (FeishuClientError, FeishuMessageError, ValueError) as exc:
+        send_result = {
+            "success": False,
+            "message": str(exc),
+            "response": None,
+        }
 
     return {
         "success": bool(send_result.get("success")),

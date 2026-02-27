@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from move37.utils.feishu import FeishuClient
+
 try:
     from dotenv import load_dotenv
 except ImportError:
@@ -16,7 +18,6 @@ LOGGER = logging.getLogger(__name__)
 
 from .config import load_feishu_config
 from .errors import ConfigurationError, DataParseError, FeishuAPIError, NetworkError
-from .feishu_client import FeishuClient
 from .notifier import notify_feishu
 
 __all__ = [
