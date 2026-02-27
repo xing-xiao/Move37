@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from move37.utils.feishu import FeishuClient
 
+MAX_CHILDREN_PER_REQUEST = 50
+
 
 def _validate_summary_result(summary_result: Dict[str, Any]) -> None:
     if not isinstance(summary_result, dict):
@@ -60,6 +62,14 @@ def _resolve_wiki_url(
             return _join_url(resolved_base, f"/docx/{document_id}")
         return f"https://feishu.cn/docx/{document_id}"
     return ""
+
+
+def _chunk_children(children: List[Dict[str, Any]], chunk_size: int) -> List[List[Dict[str, Any]]]:
+    if chunk_size <= 0:
+        raise ValueError("`chunk_size` must be greater than 0.")
+    if not children:
+        return []
+    return [children[i : i + chunk_size] for i in range(0, len(children), chunk_size)]
 
 
 def _build_children_blocks(summary_result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -213,11 +223,18 @@ class FeishuWikiWriter:
         # docx descendant API requires a docx block id.
         # `node_token` is a wiki node identifier and may fail validation here.
         # For a newly created doc, using document_id as root block_id is valid.
-        write_result = self.client.write_docx_content(
-            document_id=document_id,
-            block_id=document_id,
-            children=children,
-        )
+        write_batches = _chunk_children(children, MAX_CHILDREN_PER_REQUEST)
+        write_results: List[Dict[str, Any]] = []
+        for batch in write_batches:
+            write_results.append(
+                self.client.write_docx_content(
+                    document_id=document_id,
+                    block_id=document_id,
+                    children=batch,
+                )
+            )
+
+        write_result = write_results[-1] if write_results else {}
         return {
             "success": True,
             "title": doc_title,
@@ -226,6 +243,8 @@ class FeishuWikiWriter:
             "wiki_url": wiki_url,
             "create_response": created,
             "write_response": write_result,
+            "write_responses": write_results,
+            "write_batches": len(write_batches),
             "children_count": len(children),
         }
 
