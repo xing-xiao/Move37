@@ -10,8 +10,8 @@
       <outline type="rss" text="Anthropic" xmlUrl="https://www.youtube.com/channel/UCrDwWp7EBBv4NwvScIpBDOA"/>
     </outline>
     <outline sourceType="Blogs">
-      <outline type="rss" text="anthropic.com/research" xmlUrl="https://www.anthropic.com/research"/>
       <outline type="rss" text="latent.space" xmlUrl="https://www.latent.space/feed"/>
+      <outline type="rss" text="huggingface.co" xmlUrl="https://huggingface.co/blog/feed.xml"/>
       <outline type="rss" text="simonwillison.net" xmlUrl="https://simonwillison.net/atom/everything/"/>
       <outline type="rss" text="jeffgeerling.com" xmlUrl="https://www.jeffgeerling.com/blog.xml"/>
       <outline type="rss" text="seangoedecke.com" xmlUrl="https://www.seangoedecke.com/rss.xml"/>
