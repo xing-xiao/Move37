@@ -104,14 +104,18 @@ def collect_rss(
             raise RuntimeError(f"Feed parse failed: {feed_url} ({parsed.bozo_exception})")
     except Exception as exc:  # noqa: BLE001
         primary_error = exc
-        LOGGER.warning("请求抓取失败，尝试 feedparser 直连: %s", feed_url)
-        parsed = feedparser.parse(feed_url, request_headers=_build_headers(feed_url))
-        if parsed.bozo and not parsed.entries:
+        LOGGER.warning("请求抓取失败，尝试超时受控兜底请求: %s", feed_url)
+        try:
+            fallback_content = _fetch_feed_content(feed_url, retries=1, timeout=timeout)
+            parsed = feedparser.parse(fallback_content)
+            if parsed.bozo and not parsed.entries:
+                raise RuntimeError(f"Feed parse failed: {feed_url} ({parsed.bozo_exception})")
+        except Exception as fallback_error:  # noqa: BLE001
             raise RuntimeError(
                 f"Failed to fetch feed: {feed_url}. "
-                f"requests_error={primary_error}; "
-                f"feedparser_error={parsed.bozo_exception}"
-            ) from primary_error
+                f"primary_error={primary_error}; "
+                f"fallback_error={fallback_error}"
+            ) from fallback_error
 
     items: List[Dict[str, str]] = []
     for entry in parsed.entries:

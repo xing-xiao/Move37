@@ -35,7 +35,7 @@ def _validate_pipeline_result(name: str, data: Dict[str, Any]) -> None:
         raise ValueError(f"{name}.results must be a list.")
 
 
-def _run_once(target_date: str | None = None) -> Dict[str, Any]:
+def _run_once(target_date: str | None = None, max_sources: int | None = None) -> Dict[str, Any]:
     started_at = time.time()
     steps: List[Dict[str, Any]] = []
     errors: List[str] = []
@@ -46,7 +46,7 @@ def _run_once(target_date: str | None = None) -> Dict[str, Any]:
     # Step 1: collection
     step_started = time.time()
     try:
-        collection_result = collect_all(target_date=target_date)
+        collection_result = collect_all(target_date=target_date, max_sources=max_sources)
         _validate_pipeline_result("collection_result", collection_result)
         steps.append(
             {
@@ -159,14 +159,18 @@ def _seconds_until_next(schedule_time: str) -> int:
     return max(1, int((next_run - now).total_seconds()))
 
 
-def _run_scheduled(schedule_time: str, target_date: str | None = None) -> int:
+def _run_scheduled(
+    schedule_time: str,
+    target_date: str | None = None,
+    max_sources: int | None = None,
+) -> int:
     LOGGER.info("Scheduled mode started, run time=%s", schedule_time)
     try:
         while True:
             wait_seconds = _seconds_until_next(schedule_time)
             LOGGER.info("Next run in %s seconds", wait_seconds)
             time.sleep(wait_seconds)
-            report = _run_once(target_date=target_date)
+            report = _run_once(target_date=target_date, max_sources=max_sources)
             LOGGER.info("Scheduled run finished: %s", json.dumps(report, ensure_ascii=False))
     except KeyboardInterrupt:
         LOGGER.info("Scheduled mode stopped by user.")
@@ -188,6 +192,12 @@ def main() -> int:
         default=None,
         help="Optional target date in YYYY-MM-DD.",
     )
+    parser.add_argument(
+        "--max-sources",
+        type=int,
+        default=None,
+        help="Optional max number of OPML sources to process (for debugging).",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -196,11 +206,15 @@ def main() -> int:
     )
 
     if args.direct:
-        report = _run_once(target_date=args.target_date)
+        report = _run_once(target_date=args.target_date, max_sources=args.max_sources)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report.get("success") else 1
 
-    return _run_scheduled(schedule_time=args.schedule_time, target_date=args.target_date)
+    return _run_scheduled(
+        schedule_time=args.schedule_time,
+        target_date=args.target_date,
+        max_sources=args.max_sources,
+    )
 
 
 if __name__ == "__main__":

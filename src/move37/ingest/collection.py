@@ -41,7 +41,11 @@ def format_results(results: List[Dict], target_date: str) -> Dict:
     }
 
 
-def collect_all(target_date: str | None = None, opml_path: str | Path | None = None) -> Dict:
+def collect_all(
+    target_date: str | None = None,
+    opml_path: str | Path | None = None,
+    max_sources: int | None = None,
+) -> Dict:
     """Collect data for blogs and YouTube channels from OPML sources."""
     if target_date:
         start_time, end_time = get_date_range(target_date)
@@ -53,10 +57,27 @@ def collect_all(target_date: str | None = None, opml_path: str | Path | None = N
     sources = parse_opml(opml_path or DEFAULT_OPML_PATH)
     collected_results: List[Dict] = []
 
-    for source in sources:
+    if max_sources is not None:
+        if max_sources <= 0:
+            raise ValueError("`max_sources` must be a positive integer.")
+        sources = sources[:max_sources]
+        LOGGER.info("启用 max_sources=%d，本次仅处理前 %d 个 source。", max_sources, len(sources))
+    total_sources = len(sources)
+
+    for index, source in enumerate(sources, start=1):
         source_type = _normalize_source_type(source.get("sourceType", "Unknown"))
         source_title = source.get("xmlTitle", "Unknown")
         source_url = source.get("xmlUrl", "")
+        source_started = datetime.now(timezone.utc)
+
+        LOGGER.info(
+            "开始采集 source %d/%d: title=%s, type=%s, url=%s",
+            index,
+            total_sources,
+            source_title,
+            source_type,
+            source_url,
+        )
 
         result = {
             "source_type": source_type,
@@ -88,6 +109,17 @@ def collect_all(target_date: str | None = None, opml_path: str | Path | None = N
             result["success"] = False
             result["error"] = str(exc)
             LOGGER.error("采集失败: %s (%s): %s", source_title, source_url, exc)
+        finally:
+            duration_seconds = (datetime.now(timezone.utc) - source_started).total_seconds()
+            LOGGER.info(
+                "结束采集 source %d/%d: title=%s, success=%s, items=%d, duration=%.2fs",
+                index,
+                total_sources,
+                source_title,
+                result.get("success", False),
+                len(result.get("items", [])),
+                duration_seconds,
+            )
 
         collected_results.append(result)
 
