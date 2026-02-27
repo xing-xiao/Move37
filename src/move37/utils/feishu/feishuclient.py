@@ -37,8 +37,8 @@ class FeishuClient:
     TENANT_ACCESS_TOKEN_URI = "/open-apis/auth/v3/tenant_access_token/internal"
     TENANT_VERIFICATION_URI = "/open-apis/verification/v1/verification"
     WIKI_DOCX_CREATE_URI_TEMPLATE = "/open-apis/wiki/v2/spaces/{space_id}/nodes"
-    DOCX_DESCENDANT_CREATE_URI_TEMPLATE = (
-        "/open-apis/docx/v1/documents/{document_id}/blocks/{block_id}/descendant"
+    DOCX_CHILDREN_CREATE_URI_TEMPLATE = (
+        "/open-apis/docx/v1/documents/{document_id}/blocks/{block_id}/children"
     )
     IM_MESSAGES_URI = "/open-apis/im/v1/messages"
     DEFAULT_BASE_URL = "https://open.feishu.cn"
@@ -159,7 +159,7 @@ class FeishuClient:
             lark.BaseRequest.builder()
             .http_method(lark.HttpMethod.POST)
             .uri(
-                self.DOCX_DESCENDANT_CREATE_URI_TEMPLATE.format(
+                self.DOCX_CHILDREN_CREATE_URI_TEMPLATE.format(
                     document_id=document_id,
                     block_id=block_id,
                 )

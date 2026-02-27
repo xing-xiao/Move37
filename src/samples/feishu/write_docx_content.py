@@ -35,7 +35,7 @@ def build_simple_children(content: str) -> list[dict]:
         },
         {
             "block_type": 2,
-            "paragraph": {
+            "text": {
                 "elements": [
                     {
                         "text_run": {
@@ -46,8 +46,8 @@ def build_simple_children(content: str) -> list[dict]:
             },
         },
         {
-            "block_type": 5,
-            "quote": {
+            "block_type": 2,
+            "text": {
                 "elements": [
                     {
                         "text_run": {

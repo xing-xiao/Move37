@@ -67,7 +67,7 @@ def _build_children_blocks(summary_result: Dict[str, Any]) -> List[Dict[str, Any
             children.append(
                 {
                     "block_type": 2,
-                    "paragraph": {
+                    "text": {
                         "elements": [
                             {
                                 "text_run": {
@@ -84,22 +84,22 @@ def _build_children_blocks(summary_result: Dict[str, Any]) -> List[Dict[str, Any
             if brief:
                 children.append(
                     {
-                        "block_type": 5,
-                        "quote": {"elements": [{"text_run": {"content": brief}}]},
+                        "block_type": 2,
+                        "text": {"elements": [{"text_run": {"content": f"摘要: {brief}"}}]},
                     }
                 )
             if summary:
                 children.append(
                     {
                         "block_type": 2,
-                        "paragraph": {"elements": [{"text_run": {"content": summary}}]},
+                        "text": {"elements": [{"text_run": {"content": summary}}]},
                     }
                 )
             if (not success) and error:
                 children.append(
                     {
-                        "block_type": 5,
-                        "quote": {"elements": [{"text_run": {"content": f"失败原因: {error}"}}]},
+                        "block_type": 2,
+                        "text": {"elements": [{"text_run": {"content": f"失败原因: {error}"}}]},
                     }
                 )
     return children
