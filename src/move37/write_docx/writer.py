@@ -158,12 +158,16 @@ class FeishuWikiWriter:
             document_id = str(created.get("obj_token") or "").strip() if isinstance(created, dict) else ""
         if not node_token:
             node_token = str(created.get("node_token") or "").strip() if isinstance(created, dict) else ""
-        if not document_id or not node_token:
-            raise RuntimeError("create_docx response missing node_token or obj_token.")
+        if not document_id:
+            raise RuntimeError("create_docx response missing obj_token(document_id).")
 
+        # NOTE:
+        # docx descendant API requires a docx block id.
+        # `node_token` is a wiki node identifier and may fail validation here.
+        # For a newly created doc, using document_id as root block_id is valid.
         write_result = self.client.write_docx_content(
             document_id=document_id,
-            block_id=node_token,
+            block_id=document_id,
             children=children,
         )
         return {
